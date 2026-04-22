@@ -1,42 +1,64 @@
+// controller/AuthController.java
 package com.example.agendamento_app.controller;
 
+import com.example.agendamento_app.model.Usuario;
 import com.example.agendamento_app.service.AuthService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import jakarta.servlet.http.HttpSession;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
-@Controller
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController  // ← Mudar para @RestController
+@RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class AuthController {
 
     private final AuthService authService;
 
-    @GetMapping("/login")
-    public String telaLogin() {
-        return "login";
-    }
-
     @PostMapping("/login")
-    public String login(@RequestParam String email,
-                        @RequestParam String senha,
-                        HttpSession session,
-                        RedirectAttributes redirectAttributes) {
+    public ResponseEntity<?> login(@RequestParam String email,
+                                   @RequestParam String senha,
+                                   HttpSession session) {
+        System.out.println("Tentando login - Sessão atual: " + session.getId());
 
         if (authService.login(email, senha, session)) {
-            return "redirect:/dashboard";
+            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            System.out.println("Login realizado com sucesso para: " + email);
+            System.out.println("Sessão após login: " + session.getId());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", usuario.getId());
+            response.put("nome", usuario.getNome());
+            response.put("email", usuario.getEmail());
+            response.put("papel", usuario.getPapel());
+            response.put("empresaId", usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : null);
+
+            return ResponseEntity.ok(response);
         } else {
-            redirectAttributes.addFlashAttribute("erro", "E-mail ou senha inválidos");
-            return "redirect:/login";
+            return ResponseEntity.status(401).body(Map.of("error", "Credenciais inválidas"));
         }
     }
 
-    @GetMapping("/logout")
-    public String logout(HttpSession session) {
-        authService.logout(session);
-        return "redirect:/login";
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(HttpSession session) {
+        session.invalidate();
+        return ResponseEntity.ok(Map.of("message", "Logout realizado com sucesso"));
+    }
+
+    @GetMapping("/session")
+    public ResponseEntity<?> checkSession(HttpSession session) {
+        Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+        if (usuario != null) {
+            return ResponseEntity.ok(Map.of(
+                    "loggedIn", true,
+                    "usuario", usuario.getEmail(),
+                    "sessionId", session.getId()
+            ));
+        }
+        return ResponseEntity.ok(Map.of("loggedIn", false));
     }
 }

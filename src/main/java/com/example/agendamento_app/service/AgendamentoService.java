@@ -1,3 +1,4 @@
+// service/AgendamentoService.java
 package com.example.agendamento_app.service;
 
 import com.example.agendamento_app.model.Agendamento;
@@ -55,6 +56,7 @@ public class AgendamentoService {
         agendamento.setDuracaoMinutos(servico.getDuracaoMinutos());
         agendamento.setPrecoCobrado(servico.getPreco());
         agendamento.setStatus(StatusAgendamento.AGENDADO);
+        agendamento.setEmpresa(profissional.getEmpresa());
 
         return agendamentoRepository.save(agendamento);
     }
@@ -73,21 +75,15 @@ public class AgendamentoService {
         }
     }
 
-    // CORRIGIDO - Método de atualizar status
     @Transactional
     public Agendamento atualizarStatus(Long id, StatusAgendamento novoStatus) {
         Agendamento agendamento = agendamentoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Agendamento não encontrado com ID: " + id));
 
-        // Valida se o status é válido
         if (novoStatus == null) {
             throw new RegraNegocioException("Status não informado");
         }
 
-        // Log para debug
-        System.out.println("Atualizando agendamento " + id + " de " + agendamento.getStatus() + " para " + novoStatus);
-
-        // Valida transição
         if (agendamento.getStatus() == StatusAgendamento.CANCELADO) {
             throw new RegraNegocioException("Agendamento cancelado não pode ser alterado");
         }
@@ -97,14 +93,18 @@ public class AgendamentoService {
         }
 
         agendamento.setStatus(novoStatus);
-
         return agendamentoRepository.save(agendamento);
     }
 
     public List<Agendamento> listarAgendamentosDoDia(Long empresaId) {
         LocalDateTime inicio = LocalDate.now().atStartOfDay();
         LocalDateTime fim = LocalDate.now().plusDays(1).atStartOfDay();
-        return agendamentoRepository.findAgendamentosDoDia(empresaId, inicio, fim);
+        return agendamentoRepository.findByEmpresaIdAndDataHoraBetween(empresaId, inicio, fim);
+    }
+
+    // NOVO MÉTODO
+    public List<Agendamento> listarPorData(LocalDateTime inicio, LocalDateTime fim) {
+        return agendamentoRepository.findByDataHoraBetween(inicio, fim);
     }
 
     public List<Agendamento> listarAgendamentosPorPeriodo(Long empresaId, LocalDate inicio, LocalDate fim) {
@@ -117,6 +117,26 @@ public class AgendamentoService {
         LocalDateTime inicioDateTime = inicio.atStartOfDay();
         LocalDateTime fimDateTime = fim.plusDays(1).atStartOfDay();
         return agendamentoRepository.findByProfissionalIdAndDataHoraBetween(profissionalId, inicioDateTime, fimDateTime);
+    }
+
+    // NOVO MÉTODO - Versão simplificada para o Dashboard
+    public Map<String, Object> getEstatisticasPorData(LocalDate data) {
+        LocalDateTime inicio = data.atStartOfDay();
+        LocalDateTime fim = data.plusDays(1).atStartOfDay();
+
+        List<Agendamento> agendamentos = agendamentoRepository.findByDataHoraBetween(inicio, fim);
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("total", agendamentos.size());
+        stats.put("confirmados", agendamentos.stream().filter(a -> a.getStatus() == StatusAgendamento.CONFIRMADO).count());
+        stats.put("concluidos", agendamentos.stream().filter(a -> a.getStatus() == StatusAgendamento.CONCLUIDO).count());
+        stats.put("cancelados", agendamentos.stream().filter(a -> a.getStatus() == StatusAgendamento.CANCELADO).count());
+        stats.put("faturamento", agendamentos.stream()
+                .filter(a -> a.getStatus() == StatusAgendamento.CONCLUIDO)
+                .mapToDouble(a -> a.getPrecoCobrado().doubleValue())
+                .sum());
+
+        return stats;
     }
 
     public Map<String, Object> getEstatisticas(Long empresaId, LocalDate data) {
