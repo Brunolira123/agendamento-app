@@ -40,13 +40,16 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Rotas públicas - IMPORTANTE: /api/auth/login deve ser público
                         .requestMatchers("/api/auth/login", "/api/auth/**", "/api/usuarios/login").permitAll()
-                        // Qualquer outra requisição precisa de autenticação
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        // Log para ver todas as rotas
+        System.out.println("🔒 Security Config carregada!");
+        System.out.println("   - Rotas públicas: /api/auth/login, /api/auth/**");
+        System.out.println("   - Todas as outras rotas exigem autenticação");
 
         return http.build();
     }

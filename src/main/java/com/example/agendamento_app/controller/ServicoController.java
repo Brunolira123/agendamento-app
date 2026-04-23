@@ -6,11 +6,14 @@ import com.example.agendamento_app.model.Servico;
 import com.example.agendamento_app.model.Usuario;
 import com.example.agendamento_app.repository.EmpresaRepository;
 import com.example.agendamento_app.repository.ServicoRepository;
+import com.example.agendamento_app.repository.UsuarioRepository;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -26,15 +29,27 @@ public class ServicoController {
 
     private final ServicoRepository servicoRepository;
     private final EmpresaRepository empresaRepository;
+    private final UsuarioRepository usuarioRepository;
 
-    // Listar todos os serviços da empresa
+    private Usuario getUsuarioLogado() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        String email = authentication.getName();
+        return usuarioRepository.findByEmail(email).orElse(null);
+    }
+
     @GetMapping
-    public ResponseEntity<?> listar(@RequestParam(required = false) Boolean ativos,
-                                    HttpSession session) {
+    public ResponseEntity<?> listar(@RequestParam(required = false) Boolean ativos) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
+            }
+
+            if (usuario.getEmpresa() == null) {
+                return ResponseEntity.status(400).body(Map.of("error", "Usuário não associado a uma empresa"));
             }
 
             List<Servico> servicos;
@@ -46,21 +61,20 @@ public class ServicoController {
 
             return ResponseEntity.ok(servicos);
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }
 
-    // Buscar serviço por ID
     @GetMapping("/{id}")
-    public ResponseEntity<?> buscarPorId(@PathVariable Long id, HttpSession session) {
+    public ResponseEntity<?> buscarPorId(@PathVariable Long id) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
 
-            Servico servico = servicoRepository.findById(id)
-                    .orElse(null);
+            Servico servico = servicoRepository.findById(id).orElse(null);
 
             if (servico == null || !servico.getEmpresa().getId().equals(usuario.getEmpresa().getId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Serviço não encontrado"));
@@ -72,12 +86,10 @@ public class ServicoController {
         }
     }
 
-    // Criar novo serviço
     @PostMapping
-    public ResponseEntity<?> criar(@Valid @RequestBody Servico servico,
-                                   HttpSession session) {
+    public ResponseEntity<?> criar(@Valid @RequestBody Servico servico) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
@@ -96,19 +108,15 @@ public class ServicoController {
         }
     }
 
-    // Atualizar serviço
     @PutMapping("/{id}")
-    public ResponseEntity<?> atualizar(@PathVariable Long id,
-                                       @Valid @RequestBody Servico servicoAtualizado,
-                                       HttpSession session) {
+    public ResponseEntity<?> atualizar(@PathVariable Long id, @Valid @RequestBody Servico servicoAtualizado) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
 
-            Servico servico = servicoRepository.findById(id)
-                    .orElse(null);
+            Servico servico = servicoRepository.findById(id).orElse(null);
 
             if (servico == null || !servico.getEmpresa().getId().equals(usuario.getEmpresa().getId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Serviço não encontrado"));
@@ -126,17 +134,15 @@ public class ServicoController {
         }
     }
 
-    // Ativar/Desativar serviço
     @PatchMapping("/{id}/toggle-status")
-    public ResponseEntity<?> toggleStatus(@PathVariable Long id, HttpSession session) {
+    public ResponseEntity<?> toggleStatus(@PathVariable Long id) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
 
-            Servico servico = servicoRepository.findById(id)
-                    .orElse(null);
+            Servico servico = servicoRepository.findById(id).orElse(null);
 
             if (servico == null || !servico.getEmpresa().getId().equals(usuario.getEmpresa().getId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Serviço não encontrado"));
@@ -155,17 +161,15 @@ public class ServicoController {
         }
     }
 
-    // Deletar serviço
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deletar(@PathVariable Long id, HttpSession session) {
+    public ResponseEntity<?> deletar(@PathVariable Long id) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
 
-            Servico servico = servicoRepository.findById(id)
-                    .orElse(null);
+            Servico servico = servicoRepository.findById(id).orElse(null);
 
             if (servico == null || !servico.getEmpresa().getId().equals(usuario.getEmpresa().getId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Serviço não encontrado"));

@@ -1,4 +1,4 @@
-// controller/ProfissionalController.java
+// controller/ProfissionalController.java - VERSÃO CORRIGIDA
 package com.example.agendamento_app.controller;
 
 import com.example.agendamento_app.model.Empresa;
@@ -6,11 +6,13 @@ import com.example.agendamento_app.model.Profissional;
 import com.example.agendamento_app.model.Usuario;
 import com.example.agendamento_app.repository.EmpresaRepository;
 import com.example.agendamento_app.repository.ProfissionalRepository;
-import jakarta.servlet.http.HttpSession;
+import com.example.agendamento_app.repository.UsuarioRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -26,15 +28,38 @@ public class ProfissionalController {
 
     private final ProfissionalRepository profissionalRepository;
     private final EmpresaRepository empresaRepository;
+    private final UsuarioRepository usuarioRepository;
+
+    // Método para obter usuário do SecurityContext (JWT)
+    private Usuario getUsuarioLogado() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            System.out.println("❌ Autenticação não encontrada no SecurityContext");
+            return null;
+        }
+
+        String email = authentication.getName();
+        System.out.println("✅ Email do token: " + email);
+        return usuarioRepository.findByEmail(email).orElse(null);
+    }
 
     // Listar todos os profissionais da empresa
     @GetMapping
-    public ResponseEntity<?> listar(@RequestParam(required = false) Boolean ativos,
-                                    HttpSession session) {
+    public ResponseEntity<?> listar(@RequestParam(required = false) Boolean ativos) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            System.out.println("=== GET /api/profissionais ===");
+            Usuario usuario = getUsuarioLogado();
+
             if (usuario == null) {
+                System.out.println("❌ Usuário não encontrado no SecurityContext");
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
+            }
+
+            System.out.println("👤 Usuário: " + usuario.getEmail());
+            System.out.println("🏢 Empresa ID: " + (usuario.getEmpresa() != null ? usuario.getEmpresa().getId() : "null"));
+
+            if (usuario.getEmpresa() == null) {
+                return ResponseEntity.status(400).body(Map.of("error", "Usuário não associado a uma empresa"));
             }
 
             List<Profissional> profissionais;
@@ -44,23 +69,25 @@ public class ProfissionalController {
                 profissionais = profissionalRepository.findByEmpresaId(usuario.getEmpresa().getId());
             }
 
+            System.out.println("✅ Encontrados " + profissionais.size() + " profissionais");
             return ResponseEntity.ok(profissionais);
         } catch (Exception e) {
+            System.err.println("❌ Erro: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }
 
     // Buscar profissional por ID
     @GetMapping("/{id}")
-    public ResponseEntity<?> buscarPorId(@PathVariable Long id, HttpSession session) {
+    public ResponseEntity<?> buscarPorId(@PathVariable Long id) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
 
-            Profissional profissional = profissionalRepository.findById(id)
-                    .orElse(null);
+            Profissional profissional = profissionalRepository.findById(id).orElse(null);
 
             if (profissional == null || !profissional.getEmpresa().getId().equals(usuario.getEmpresa().getId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Profissional não encontrado"));
@@ -74,10 +101,9 @@ public class ProfissionalController {
 
     // Criar novo profissional
     @PostMapping
-    public ResponseEntity<?> criar(@Valid @RequestBody Profissional profissional,
-                                   HttpSession session) {
+    public ResponseEntity<?> criar(@Valid @RequestBody Profissional profissional) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
@@ -98,17 +124,14 @@ public class ProfissionalController {
 
     // Atualizar profissional
     @PutMapping("/{id}")
-    public ResponseEntity<?> atualizar(@PathVariable Long id,
-                                       @Valid @RequestBody Profissional profissionalAtualizado,
-                                       HttpSession session) {
+    public ResponseEntity<?> atualizar(@PathVariable Long id, @Valid @RequestBody Profissional profissionalAtualizado) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
 
-            Profissional profissional = profissionalRepository.findById(id)
-                    .orElse(null);
+            Profissional profissional = profissionalRepository.findById(id).orElse(null);
 
             if (profissional == null || !profissional.getEmpresa().getId().equals(usuario.getEmpresa().getId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Profissional não encontrado"));
@@ -127,15 +150,14 @@ public class ProfissionalController {
 
     // Ativar/Desativar profissional
     @PatchMapping("/{id}/toggle-status")
-    public ResponseEntity<?> toggleStatus(@PathVariable Long id, HttpSession session) {
+    public ResponseEntity<?> toggleStatus(@PathVariable Long id) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
 
-            Profissional profissional = profissionalRepository.findById(id)
-                    .orElse(null);
+            Profissional profissional = profissionalRepository.findById(id).orElse(null);
 
             if (profissional == null || !profissional.getEmpresa().getId().equals(usuario.getEmpresa().getId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Profissional não encontrado"));
@@ -156,15 +178,14 @@ public class ProfissionalController {
 
     // Deletar profissional
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deletar(@PathVariable Long id, HttpSession session) {
+    public ResponseEntity<?> deletar(@PathVariable Long id) {
         try {
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogado");
+            Usuario usuario = getUsuarioLogado();
             if (usuario == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Não autorizado"));
             }
 
-            Profissional profissional = profissionalRepository.findById(id)
-                    .orElse(null);
+            Profissional profissional = profissionalRepository.findById(id).orElse(null);
 
             if (profissional == null || !profissional.getEmpresa().getId().equals(usuario.getEmpresa().getId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Profissional não encontrado"));

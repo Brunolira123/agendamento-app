@@ -1,4 +1,4 @@
-// security/JwtService.java
+// security/JwtService.java - versão completa e estável
 package com.example.agendamento_app.security;
 
 import io.jsonwebtoken.Claims;
@@ -25,7 +25,8 @@ public class JwtService {
     private Long expiration;
 
     private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     public String extractUsername(String token) {
