@@ -12,4 +12,6 @@ public interface ProfissionalRepository extends JpaRepository<Profissional, Long
 
     // Busca profissionais ativos por empresa
     List<Profissional> findByEmpresaIdAndAtivoTrue(Long empresaId);
+
+    long countByEmpresaId(Long empresaId);
 }

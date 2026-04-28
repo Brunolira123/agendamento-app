@@ -29,4 +29,6 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> 
     List<Agendamento> findAgendamentosDoDia(@Param("empresaId") Long empresaId,
                                             @Param("inicio") LocalDateTime inicio,
                                             @Param("fim") LocalDateTime fim);
+    long countByEmpresaId(Long empresaId);
+
 }

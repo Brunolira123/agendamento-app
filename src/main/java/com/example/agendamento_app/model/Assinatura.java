@@ -1,21 +1,18 @@
 package com.example.agendamento_app.model;
 
-import com.example.agendamento_app.model.enums.StatusAssinatura;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
-import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Data
 @Entity
 @NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "assinatura", indexes = {
-        @Index(name = "idx_assinatura_cliente", columnList = "cliente_id"),
+        @Index(name = "idx_assinatura_empresa", columnList = "empresa_id"),
         @Index(name = "idx_assinatura_status", columnList = "status")
 })
 public class Assinatura {
@@ -25,45 +22,68 @@ public class Assinatura {
     private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "cliente_id", nullable = false)
+    @JoinColumn(name = "empresa_id", nullable = false)
+    private Empresa empresa;
+
+    // ADICIONAR RELACIONAMENTO COM CLIENTE
+    @ManyToOne
+    @JoinColumn(name = "cliente_id")
     private Cliente cliente;
 
     @ManyToOne
     @JoinColumn(name = "plano_id", nullable = false)
-    private PlanoAssinatura plano;
+    private Plano plano;
 
-    @Column(name = "data_inicio", nullable = false)
-    private LocalDate dataInicio;
+    @Column(nullable = false, length = 20)
+    private String status = "ATIVA"; // ATIVA, CANCELADA, EXPIRADA, TESTE
+
+    @Column(length = 10)
+    private String periodo = "mensal"; // mensal, anual
+
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal valor;
+
+    @Column(name = "data_inicio")
+    private LocalDateTime dataInicio;
 
     @Column(name = "data_fim")
-    private LocalDate dataFim;
+    private LocalDateTime dataFim;
 
-    @Column(name = "atendimentos_utilizados_mes")
-    private Integer atendimentosUtilizadosMes = 0;
+    @Column(name = "data_cancelamento")
+    private LocalDateTime dataCancelamento;
 
-    @Column(name = "ultima_renovacao")
-    private LocalDate ultimaRenovacao;
+    @Column(name = "dias_teste")
+    private Integer diasTeste = 7;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private StatusAssinatura status = StatusAssinatura.ATIVA;
+    @Column(name = "assinatura_externa_id", length = 100)
+    private String assinaturaExternaId;
+
+    @Column(name = "cliente_externo_id", length = 100)
+    private String clienteExternoId;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "assinatura")
-    private List<Agendamento> agendamentos = new ArrayList<>();
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
-        if (atendimentosUtilizadosMes == null) atendimentosUtilizadosMes = 0;
-        if (status == null) status = StatusAssinatura.ATIVA;
-
-        // Se não tem data fim, define para 1 mês após início
-        if (dataFim == null && dataInicio != null) {
-            dataFim = dataInicio.plusMonths(1);
+        updatedAt = LocalDateTime.now();
+        if (dataInicio == null) {
+            dataInicio = LocalDateTime.now();
+        }
+        if (status == null) {
+            status = "ATIVA";
+        }
+        if (periodo == null) {
+            periodo = "mensal";
         }
     }
-}
 
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+}

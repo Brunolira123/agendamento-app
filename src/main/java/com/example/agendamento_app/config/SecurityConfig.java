@@ -1,4 +1,3 @@
-// config/SecurityConfig.java
 package com.example.agendamento_app.config;
 
 import com.example.agendamento_app.security.CustomUserDetailsService;
@@ -40,15 +39,21 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/auth/**", "/api/usuarios/login").permitAll()
+                        // 🔓 ROTAS PÚBLICAS (não precisam de token)
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/cadastro",
+                                "/api/auth/reset-admin",
+                                "/api/usuarios/login"
+                        ).permitAll()
+                        // 🔒 Todas as outras rotas exigem autenticação
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
-        // Log para ver todas as rotas
         System.out.println("🔒 Security Config carregada!");
-        System.out.println("   - Rotas públicas: /api/auth/login, /api/auth/**");
+        System.out.println("   - Rotas públicas: /api/auth/login, /api/auth/cadastro, /api/auth/reset-admin");
         System.out.println("   - Todas as outras rotas exigem autenticação");
 
         return http.build();

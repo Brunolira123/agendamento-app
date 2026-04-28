@@ -1,4 +1,3 @@
-// security/JwtAuthenticationFilter.java
 package com.example.agendamento_app.security;
 
 import jakarta.servlet.FilterChain;
@@ -14,8 +13,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
-// security/JwtAuthenticationFilter.java
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -25,66 +25,66 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     private CustomUserDetailsService userDetailsService;
 
+    // Rotas que NÃO precisam de autenticação
+    private static final List<String> PUBLIC_PATHS = Arrays.asList(
+            "/api/auth/login",
+            "/api/auth/cadastro",
+            "/api/auth/reset-admin",
+            "/api/usuarios/login"
+    );
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
-                                    FilterChain filterChain)
-            throws ServletException, IOException {
+                                    FilterChain filterChain) throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
-        final String requestPath = request.getServletPath();
+        String path = request.getRequestURI();
+        System.out.println("🔄 Filtro executando para: " + path);
 
-        System.out.println("🔄 Filtro executando para: " + requestPath);
-        System.out.println("   Authorization header: " + (authHeader != null ? "Presente" : "Ausente"));
-
-        // Pular validação para rotas de autenticação
-        if (requestPath.contains("/api/auth/login") || requestPath.contains("/api/usuarios/login")) {
-            System.out.println("⏭️ Pulando validação para rota pública");
+        // Verifica se é uma rota pública
+        if (isPublicPath(path)) {
+            System.out.println("✅ Rota pública, ignorando autenticação");
             filterChain.doFilter(request, response);
             return;
         }
+
+        // Para rotas privadas, verifica o token
+        String authHeader = request.getHeader("Authorization");
+        System.out.println("   Authorization header: " + (authHeader != null ? "Presente" : "Ausente"));
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             System.out.println("❌ Token não encontrado ou formato inválido");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
-            response.getWriter().write("{\"error\":\"Token não fornecido\"}");
+            response.getWriter().write("{\"error\": \"Token não fornecido\"}");
             return;
         }
 
-        final String jwt = authHeader.substring(7);
-        System.out.println("📝 Token recebido: " + jwt.substring(0, Math.min(50, jwt.length())) + "...");
+        String token = authHeader.substring(7);
+        String email = jwtService.extractUsername(token);
 
-        try {
-            final String userEmail = jwtService.extractUsername(jwt);
-            System.out.println("👤 Email extraído: " + userEmail);
+        if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
-            if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
-
-                if (jwtService.validateToken(jwt, userDetails)) {
-                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
-                    );
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                    System.out.println("✅ Token validado com sucesso para: " + userEmail);
-                } else {
-                    System.out.println("❌ Token inválido para: " + userEmail);
-                }
+            if (jwtService.validateToken(token, userDetails)) {
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities()
+                );
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+                System.out.println("✅ Token válido para: " + email);
+            } else {
+                System.out.println("❌ Token inválido");
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.getWriter().write("{\"error\": \"Token inválido\"}");
+                return;
             }
-        } catch (Exception e) {
-            System.out.println("❌ Erro ao validar token: " + e.getMessage());
-            e.printStackTrace();
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"error\":\"Token inválido: " + e.getMessage() + "\"}");
-            return;
         }
 
         filterChain.doFilter(request, response);
     }
 
+    private boolean isPublicPath(String path) {
+        return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
+    }
 }
