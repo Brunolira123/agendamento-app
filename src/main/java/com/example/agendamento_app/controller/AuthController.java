@@ -1,9 +1,17 @@
 package com.example.agendamento_app.controller;
 
-import com.example.agendamento_app.model.*;
-import com.example.agendamento_app.repository.*;
+import com.example.agendamento_app.model.Empresa;
+import com.example.agendamento_app.model.Usuario;
+import com.example.agendamento_app.model.Plano;
+import com.example.agendamento_app.model.Assinatura;
+import com.example.agendamento_app.model.UsoEmpresa;
+import com.example.agendamento_app.repository.EmpresaRepository;
+import com.example.agendamento_app.repository.UsuarioRepository;
+import com.example.agendamento_app.repository.PlanoRepository;
+import com.example.agendamento_app.repository.AssinaturaRepository;
+import com.example.agendamento_app.repository.UsoEmpresaRepository;
 import com.example.agendamento_app.security.JwtService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -22,29 +30,48 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
+@RequiredArgsConstructor
 public class AuthController {
 
-    @Autowired
-    private AuthenticationManager authenticationManager;
+    private final AuthenticationManager authenticationManager;
+    private final JwtService jwtService;
+    private final UsuarioRepository usuarioRepository;
+    private final EmpresaRepository empresaRepository;
+    private final PlanoRepository planoRepository;
+    private final AssinaturaRepository assinaturaRepository;
+    private final UsoEmpresaRepository usoEmpresaRepository;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    @Autowired
-    private JwtService jwtService;
+    // Método para validar CPF
+    private boolean validarCPF(String cpf) {
+        if (cpf == null || cpf.isEmpty()) return true; // CPF é opcional
 
-    @Autowired
-    private UsuarioRepository usuarioRepository;
+        String cpfLimpo = cpf.replaceAll("\\D", "");
+        if (cpfLimpo.length() != 11) return false;
 
-    @Autowired
-    private EmpresaRepository empresaRepository;
+        // Verificar se todos os dígitos são iguais
+        if (cpfLimpo.matches("(\\d)\\1{10}")) return false;
 
-    @Autowired
-    private AssinaturaRepository assinaturaRepository;
+        // Calcular primeiro dígito verificador
+        int soma = 0;
+        for (int i = 0; i < 9; i++) {
+            soma += (cpfLimpo.charAt(i) - '0') * (10 - i);
+        }
+        int primeiroDigito = 11 - (soma % 11);
+        if (primeiroDigito >= 10) primeiroDigito = 0;
 
-    @Autowired
-    private UsoEmpresaRepository usoEmpresaRepository;
+        if (primeiroDigito != (cpfLimpo.charAt(9) - '0')) return false;
 
-    @Autowired
-    private PlanoRepository planoRepository;
+        // Calcular segundo dígito verificador
+        soma = 0;
+        for (int i = 0; i < 10; i++) {
+            soma += (cpfLimpo.charAt(i) - '0') * (11 - i);
+        }
+        int segundoDigito = 11 - (soma % 11);
+        if (segundoDigito >= 10) segundoDigito = 0;
 
+        return segundoDigito == (cpfLimpo.charAt(10) - '0');
+    }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestParam String email, @RequestParam String senha) {
@@ -88,6 +115,19 @@ public class AuthController {
             String nicho = (String) request.get("nicho");
             String telefone = (String) request.get("telefone");
             String nomeDono = (String) request.get("nomeDono");
+            String cpf = (String) request.get("cpf");
+
+            // Validar CPF se foi informado
+            if (cpf != null && !cpf.isEmpty() && !validarCPF(cpf)) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "CPF inválido"));
+            }
+
+            // Validar email
+            if (email == null || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "E-mail inválido"));
+            }
 
             // Pegar plano (padrão: Profissional = 2)
             Long planoId = request.get("planoId") != null ?
@@ -95,7 +135,7 @@ public class AuthController {
             String periodo = request.get("periodo") != null ?
                     request.get("periodo").toString() : "mensal";
 
-            // Validações
+            // Validações básicas
             if (email == null || senha == null || nomeEmpresa == null || slug == null) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body(Map.of("error", "Campos obrigatórios não preenchidos"));
@@ -124,15 +164,15 @@ public class AuthController {
             empresa.setNicho(nicho != null ? nicho : "barbearia");
             empresa.setEmail(email);
             empresa.setTelefone(telefone);
+            empresa.setCpfProprietario(cpf != null ? cpf.replaceAll("\\D", "") : null);
             empresa.setConfig("{}");
             Empresa empresaSalva = empresaRepository.save(empresa);
             System.out.println("✅ Empresa criada: ID=" + empresaSalva.getId());
 
             // 5. Cria o usuário dono
-            BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
             Usuario usuario = new Usuario();
             usuario.setEmail(email);
-            usuario.setSenha(encoder.encode(senha));
+            usuario.setSenha(passwordEncoder.encode(senha));
             usuario.setNome(nomeDono != null ? nomeDono : "Proprietário");
             usuario.setEmpresa(empresaSalva);
             usuario.setPapel("DONO");
@@ -147,23 +187,19 @@ public class AuthController {
             assinatura.setStatus("TESTE");
             assinatura.setPeriodo(periodo);
 
-            // Define o valor baseado no período
             BigDecimal valor = periodo.equals("anual") ? plano.getPrecoAnual() : plano.getPrecoMensal();
             assinatura.setValor(valor);
-
             assinatura.setDataInicio(LocalDateTime.now());
-            assinatura.setDataFim(LocalDateTime.now().plusDays(7)); // 7 dias de teste
+            assinatura.setDataFim(LocalDateTime.now().plusDays(7));
             assinatura.setDiasTeste(7);
 
             Assinatura assinaturaSalva = assinaturaRepository.save(assinatura);
-            System.out.println("✅ Assinatura criada: ID=" + assinaturaSalva.getId() +
-                    ", Plano=" + plano.getNome() +
-                    ", Válida até=" + assinaturaSalva.getDataFim());
+            System.out.println("✅ Assinatura criada: ID=" + assinaturaSalva.getId());
 
-            // 7. Cria registro de uso da empresa (para controle de limites)
+            // 7. Cria registro de uso da empresa
             LocalDate primeiroDiaMes = LocalDate.now().withDayOfMonth(1);
             UsoEmpresa usoEmpresa = new UsoEmpresa();
-            usoEmpresa.setEmpresaId(empresaSalva.getId());
+            usoEmpresa.setEmpresa(empresaSalva);
             usoEmpresa.setMesReferencia(primeiroDiaMes);
             usoEmpresa.setTotalAgendamentos(0);
             usoEmpresa.setTotalProfissionais(0);
@@ -220,8 +256,6 @@ public class AuthController {
 
     @PostMapping("/reset-admin")
     public String resetAdmin() {
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-
         // Remove empresa do admin se existir
         empresaRepository.findBySlug("barbearia-teste").ifPresent(e -> {
             empresaRepository.delete(e);
@@ -247,10 +281,10 @@ public class AuthController {
         // Cria novo admin
         Usuario usuario = new Usuario();
         usuario.setEmail("admin@barbearia.com");
-        usuario.setSenha(encoder.encode("123456"));
+        usuario.setSenha(passwordEncoder.encode("123456"));
         usuario.setNome("Administrador");
         usuario.setEmpresa(empresaSalva);
-        usuario.setPapel("DONO");
+        usuario.setPapel("ADMIN");
         usuario.setAtivo(true);
         usuarioRepository.save(usuario);
 

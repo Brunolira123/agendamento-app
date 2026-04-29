@@ -18,8 +18,9 @@ public class UsoEmpresa {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "empresa_id", nullable = false)
-    private Long empresaId;
+    @ManyToOne
+    @JoinColumn(name = "empresa_id", nullable = false)
+    private Empresa empresa;
 
     @Column(name = "mes_referencia", nullable = false)
     private LocalDate mesReferencia;

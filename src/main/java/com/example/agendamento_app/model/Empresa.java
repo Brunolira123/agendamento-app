@@ -39,6 +39,9 @@ public class Empresa {
     @Column(columnDefinition = "TEXT")
     private String config;
 
+    @Column(name = "cpf_proprietario", length = 14)
+    private String cpfProprietario;  // NOVO CAMPO
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

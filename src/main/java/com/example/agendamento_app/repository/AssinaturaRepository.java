@@ -25,4 +25,5 @@ public interface AssinaturaRepository extends JpaRepository<Assinatura, Long> {
 
     @Query("SELECT a.plano.nome, COUNT(a), SUM(a.valor) FROM Assinatura a GROUP BY a.plano.id, a.plano.nome")
     List<Object[]> countByPlanoGroup();
+
 }
